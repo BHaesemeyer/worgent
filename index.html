@@ -20,6 +20,7 @@
     --charcoal:#2E2B27;
     --brick:#C4433A;
     --sage:#5B8A4A;
+    --gray:#5A5C5E;
     --safe-top:env(safe-area-inset-top, 0);
     --safe-bottom:env(safe-area-inset-bottom, 0);
   }
@@ -173,7 +174,7 @@
   }
   .tile.green{background:var(--sage);border-color:var(--sage);color:#fff}
   .tile.amber{background:var(--amber);border-color:var(--amber);color:var(--charcoal)}
-  .tile.red{background:var(--brick);border-color:var(--brick);color:#fff}
+  .tile.red{background:var(--gray);border-color:var(--gray);color:#fff}
   .row.shake{animation:shake .42s}
   @keyframes shake{
     10%,90%{transform:translateX(-2px)}
@@ -214,7 +215,7 @@
   .key:active{transform:scale(.92)}
   .key.green{background:var(--sage);color:#fff}
   .key.amber{background:var(--amber);color:var(--charcoal)}
-  .key.red{background:var(--brick);color:#fff;opacity:.7}
+  .key.red{background:var(--gray);color:#fff;opacity:.7}
   #overlay{
     position:fixed;inset:0;background:rgba(46,43,39,.55);
     display:none;align-items:center;justify-content:center;
@@ -364,7 +365,7 @@
   }
   .rules-tile.green{background:var(--sage);color:#fff}
   .rules-tile.amber{background:var(--amber);color:var(--charcoal)}
-  .rules-tile.red{background:var(--brick);color:#fff}
+  .rules-tile.red{background:var(--gray);color:#fff}
   .rules-formula{
     background:var(--white);
     border:2px dashed var(--sand);
@@ -465,7 +466,7 @@
     <button id="rulesbtn" aria-label="How to play" title="How to play">?</button>
     <button id="statsbtn" aria-label="View stats" title="Stats">📊</button>
     <h1 class="logo">Worgent</h1>
-    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.23</span></p>
+    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.26</span></p>
     <div class="mode-toggle" role="tablist" aria-label="Game mode">
       <button class="mode-pill active" id="mode-daily" role="tab" aria-selected="true">Daily</button>
       <button class="mode-pill" id="mode-freeplay" role="tab" aria-selected="false">Freeplay</button>
@@ -527,7 +528,7 @@ const RULES_HTML = `
   </div>
   <div class="rules-section">
     <h3>Scoring</h3>
-    <p>Faster + fewer wrong guesses = higher score. Each round caps at 1000, total caps at 5000.</p>
+    <p>Each round earns up to <b>2000 points</b>: 1000 for speed and 1000 for guess count. Both decay quickly at first then slow down — so taking your time or guessing a few extra still pays off. Game total caps at <b>10000</b>.</p>
   </div>
   <div class="rules-section">
     <h3>Daily vs Freeplay</h3>
@@ -670,7 +671,7 @@ function freshState(mode){
   return {
     mode, dayIdx, round: 0, words,
     rounds: ROUND_LENGTHS.map(L => ({
-      length: L, guesses: [], wrong: 0, secs: 0, score: 0, status: 'pending',
+      length: L, guesses: [], wrong: 0, secs: 0, score: 0, timeScore: 0, guessScore: 0, status: 'pending',
     })),
     finished: false,
     currentGuess: '',
@@ -818,9 +819,31 @@ function evaluateGuess(guess, answer){
   return marks;
 }
 
-function calcScore(secs, wrong, status){
+// ---- Scoring ----
+// Each round earns up to 2000 points (5 rounds × 2000 = 10000 game max).
+// The total is split equally:
+//   - Time score (max 1000): rewards finishing quickly
+//   - Guess score (max 1000): rewards solving in fewer guesses
+// Both use exponential decay so first few seconds / first few extra guesses
+// cost the most, then diminishing returns. A floor keeps either side from
+// dropping to 0 — slow-and-careful and fast-and-many-guesses both stay viable.
+const TIME_TAU = 50;     // seconds — larger = slower decay
+const GUESS_TAU = 4;     // guesses — larger = slower decay
+const SCORE_FLOOR = 50;  // minimum per side (so abandoning ≠ giving up wins)
+
+function calcTimeScore(secs){
+  if (!isFinite(secs) || secs <= 0) return 1000;
+  const v = 1000 * Math.exp(-secs / TIME_TAU);
+  return Math.max(SCORE_FLOOR, Math.round(v));
+}
+function calcGuessScore(guesses){
+  if (!isFinite(guesses) || guesses <= 1) return 1000;
+  const v = 1000 * Math.exp(-(guesses - 1) / GUESS_TAU);
+  return Math.max(SCORE_FLOOR, Math.round(v));
+}
+function calcScore(secs, guesses, status){
   if (status === 'timeout') return 0;
-  return Math.max(0, Math.round(1000 - (secs * 1.2) - (wrong * 30)));
+  return calcTimeScore(secs) + calcGuessScore(guesses);
 }
 
 const $ = (id) => document.getElementById(id);
@@ -940,10 +963,19 @@ function toast(text, ms){
 }
 
 function startTimer(){
-  const r = state.rounds[state.round];
-  roundStartMs = Date.now() - (r.secs * 1000);
-  updateTimer();
+  // Ensure no stale interval from a prior round is still alive.
   clearInterval(timerInterval);
+  timerInterval = null;
+  const r = state.rounds[state.round];
+  // If this round has no guesses yet, treat it as brand-new and zero the
+  // clock — defends against any stale r.secs value carried in via state.
+  // Rounds with at least one guess are resumed from where they left off.
+  if (r.guesses.length === 0) r.secs = 0;
+  roundStartMs = Date.now() - (r.secs * 1000);
+  // Force the display to update immediately so the user sees the reset.
+  const tEl = $('timer');
+  if (tEl) tEl.textContent = formatTime(r.secs);
+  updateTimer();
   timerInterval = setInterval(updateTimer, 250);
 }
 function stopTimer(){ clearInterval(timerInterval); timerInterval = null; }
@@ -1035,7 +1067,9 @@ function submitGuess(word){
     if (isWin){
       r.status = 'won';
       r.secs = Math.floor((Date.now() - roundStartMs) / 1000);
-      r.score = calcScore(r.secs, r.wrong, 'won');
+      r.timeScore = calcTimeScore(r.secs);
+      r.guessScore = calcGuessScore(r.guesses.length);
+      r.score = r.timeScore + r.guessScore;
       stopTimer();
       tiles.forEach((tile, i) => {
         setTimeout(() => tile.classList.add('bounce'), i * 80);
@@ -1067,11 +1101,13 @@ function showRoundComplete(timedOut){
   card.className = 'card';
   // Only show the "Review past rounds" button if there are completed rounds before this one
   const hasPast = state.round > 0;
+  const tScore = r.timeScore || 0;
+  const gScore = r.guessScore || 0;
   card.innerHTML = `
     <h2>${timedOut ? "Time's up!" : 'Solved'}</h2>
     <div class="word">${answer}</div>
-    <div class="stat"><span>Time</span><b>${formatTime(r.secs)}</b></div>
-    <div class="stat"><span>Wrong guesses</span><b>${r.wrong}</b></div>
+    <div class="stat"><span>Time</span><b>${formatTime(r.secs)} <span style="opacity:.55;font-size:13px">(+${tScore})</span></b></div>
+    <div class="stat"><span>Guesses</span><b>${r.guesses.length} <span style="opacity:.55;font-size:13px">(+${gScore})</span></b></div>
     <div class="stat"><span>Round score</span><b id="rscore">0</b></div>
     <button class="btn" id="nextbtn">${state.round < 4 ? 'Next round →' : 'See results →'}</button>
     ${hasPast ? '<button class="btn secondary" id="reviewpastbtn">Review past rounds</button>' : ''}
@@ -1207,7 +1243,7 @@ function showResults(){
   `;
   overlay.appendChild(card);
   overlay.classList.add('show');
-  countUp($('totalscore'), 0, total, 1000, n => `${n}/5000`);
+  countUp($('totalscore'), 0, total, 1000, n => `${n}/10000`);
   $('sharebtn').addEventListener('click', () => doShare(total));
   $('reviewbtn').addEventListener('click', () => enterReviewMode(0));
   // Tap a row to jump straight to that round's review
@@ -1235,10 +1271,11 @@ function showResults(){
 }
 
 function ratingFor(total){
-  if (total >= 4500) return 'Legendary 🔥';
-  if (total >= 3500) return 'Excellent';
-  if (total >= 2500) return 'Solid';
-  if (total >= 1000) return 'Keep practicing';
+  // Scale: max possible is 10000 (5 rounds × 2000 = 1000 time + 1000 guess each)
+  if (total >= 9000) return 'Legendary 🔥';
+  if (total >= 7000) return 'Excellent';
+  if (total >= 5000) return 'Solid';
+  if (total >= 2000) return 'Keep practicing';
   return 'Rough day';
 }
 
@@ -1249,8 +1286,8 @@ function buildShareText(total){
   // WhatsApp contact suggestions. The middle dot avoids that.
   const isFreeplay = state.mode === 'freeplay';
   const heading = isFreeplay
-    ? `Worgent Freeplay — ${total} of 5000`
-    : `Worgent · ${formatPuzzleDate(state.dayIdx)} — ${total} of 5000`;
+    ? `Worgent Freeplay — ${total} of 10000`
+    : `Worgent · ${formatPuzzleDate(state.dayIdx)} — ${total} of 10000`;
   const lines = [heading, ''];
   const lenEmoji = ['3️⃣','4️⃣','5️⃣','6️⃣','7️⃣'];
   state.rounds.forEach((r, i) => {
@@ -1435,18 +1472,19 @@ function showStats(){
   const s = computeStats(history);
   const panel = $('stats-panel');
 
+  // 10 bins of 1000 points each → covers full 0–10000 range
   const bins = new Array(10).fill(0);
   for (const t of s.totals){
-    const i = Math.min(9, Math.floor(t / 500));
+    const i = Math.min(9, Math.floor(t / 1000));
     bins[i]++;
   }
   const maxBin = Math.max(1, ...bins);
   const todayEntry = history.find(g => g.dayIdx === dayIdx);
-  const curBin = todayEntry ? Math.min(9, Math.floor(todayEntry.total / 500)) : -1;
+  const curBin = todayEntry ? Math.min(9, Math.floor(todayEntry.total / 1000)) : -1;
   const histoHtml = bins.map((n, i) => {
     const h = Math.round(100 * n / maxBin);
     const cls = i === curBin ? 'histo-bar cur' : 'histo-bar';
-    return `<div class="${cls}" style="height:${h}%" title="${i*500}-${(i+1)*500}: ${n} game${n===1?'':'s'}"></div>`;
+    return `<div class="${cls}" style="height:${h}%" title="${i*1000}-${(i+1)*1000}: ${n} game${n===1?'':'s'}"></div>`;
   }).join('');
 
   let perRoundHtml = '';
@@ -1470,7 +1508,7 @@ function showStats(){
     histoBlock = `
       <div class="section-title">Score distribution</div>
       <div class="histo">${histoHtml}</div>
-      <div class="histo-axis"><span>0</span><span>2500</span><span>5000</span></div>`;
+      <div class="histo-axis"><span>0</span><span>5000</span><span>10000</span></div>`;
   }
 
   const emptyMsg = s.games === 0
