@@ -51,9 +51,8 @@
       var(--brown) 84px 112px);
     opacity:.85;
   }
-  #statsbtn{
-    position:absolute;
-    top:18px;right:0;
+  #statsbtn, #rulesbtn{
+    position:absolute;top:28px;
     background:var(--white);border:2px solid var(--sand);
     cursor:pointer;font-size:18px;line-height:1;
     width:38px;height:38px;
@@ -61,9 +60,12 @@
     border-radius:10px;
     transition:transform .1s, background .15s, border-color .15s;
     z-index:65;
+    color:var(--brown);font-weight:800;font-family:inherit;
   }
-  #statsbtn:hover{background:var(--cream);border-color:var(--brown)}
-  #statsbtn:active{transform:scale(.92)}
+  #statsbtn{right:0}
+  #rulesbtn{right:46px}
+  #statsbtn:hover, #rulesbtn:hover{background:var(--cream);border-color:var(--brown)}
+  #statsbtn:active, #rulesbtn:active{transform:scale(.92)}
   h1.logo{
     margin:18px 0 4px;font-size:36px;font-weight:900;
     letter-spacing:.14em;color:var(--charcoal);text-transform:uppercase;
@@ -334,6 +336,42 @@
   }
   .closebtn:hover{background:rgba(74,44,26,.1)}
   .closebtn:active{background:rgba(74,44,26,.2)}
+  /* === RULES / WELCOME === */
+  .rules-section{margin:14px 0 6px;text-align:left}
+  .rules-section h3{
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--brown);margin:0 0 6px;font-weight:800;
+  }
+  .rules-section p{
+    font-size:13px;color:var(--charcoal);margin:0 0 8px;line-height:1.45;
+  }
+  .rules-tile-row{
+    display:flex;gap:6px;align-items:center;
+    margin:6px 0;font-size:13px;text-align:left;
+  }
+  .rules-tile{
+    width:28px;height:28px;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:14px;flex-shrink:0;
+  }
+  .rules-tile.green{background:var(--sage);color:#fff}
+  .rules-tile.amber{background:var(--amber);color:var(--charcoal)}
+  .rules-tile.red{background:var(--brick);color:#fff}
+  .rules-formula{
+    background:var(--white);
+    border:2px dashed var(--sand);
+    border-radius:8px;
+    padding:8px 10px;margin:8px 0;
+    font-family:'Courier New',monospace;
+    font-size:12px;text-align:center;color:var(--brown);
+    font-weight:700;
+  }
+  .welcome-modes{
+    display:flex;flex-direction:column;gap:8px;margin-top:14px;
+  }
+  .welcome-modes .btn{
+    width:100%;margin-top:0;
+  }
   /* === REVIEW MODE === */
   .review-bar{
     display:flex;align-items:center;justify-content:space-between;
@@ -382,7 +420,8 @@
     #app{padding-left:10px;padding-right:10px}
     h1.logo{font-size:32px;letter-spacing:.12em;margin:14px 0 2px}
     .tagline{font-size:10px;margin-bottom:6px}
-    #statsbtn{width:36px;height:36px;font-size:16px;top:16px}
+    #statsbtn, #rulesbtn{width:36px;height:36px;font-size:16px;top:24px}
+    #rulesbtn{right:42px}
     .roundlbl{font-size:12px}
     .timer{font-size:18px;padding:2px 8px}
     .row{gap:4px}
@@ -415,9 +454,10 @@
 <div id="app">
   <header>
     <div class="stripes" aria-hidden="true"></div>
+    <button id="rulesbtn" aria-label="How to play" title="How to play">?</button>
     <button id="statsbtn" aria-label="View stats" title="Stats">📊</button>
     <h1 class="logo">Worgent</h1>
-    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.13</span></p>
+    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.17</span></p>
     <div class="mode-toggle" role="tablist" aria-label="Game mode">
       <button class="mode-pill active" id="mode-daily" role="tab" aria-selected="true">Daily</button>
       <button class="mode-pill" id="mode-freeplay" role="tab" aria-selected="false">Freeplay</button>
@@ -460,8 +500,34 @@ const VALID = {};
 for (const L of [3,4,5,6,7]) VALID[L] = new Set(VALID_RAW[L]);
 
 /* ============================================================
-   WORGENT — game logic (v1.13 — review mode + stats stays accessible)
+   WORGENT — game logic (v1.15 — no auto-advance + bounded review + welcome/begin gate)
    ============================================================ */
+
+// Reusable rules content for the welcome screen and the ? side panel
+const RULES_HTML = `
+  <div class="rules-section">
+    <h3>The gauntlet</h3>
+    <p>Five word puzzles in order, growing from 3 letters up to 7. Solve each to earn points.</p>
+  </div>
+  <div class="rules-section">
+    <h3>How to guess</h3>
+    <p>Type a real word and press Enter. After each guess the tiles flip to show how close you were:</p>
+    <div class="rules-tile-row"><div class="rules-tile green">A</div><span>right letter, right spot</span></div>
+    <div class="rules-tile-row"><div class="rules-tile amber">A</div><span>right letter, wrong spot</span></div>
+    <div class="rules-tile-row"><div class="rules-tile red">A</div><span>letter not in the word</span></div>
+    <p>No guess limit — keep going until you get it. Invalid words just shake.</p>
+  </div>
+  <div class="rules-section">
+    <h3>Scoring</h3>
+    <div class="rules-formula">round score = max(0,&nbsp; 1000 − seconds × 1.2 − wrong × 30)</div>
+    <p>Faster + fewer wrong guesses = higher score. Each round caps at 1000, total caps at 5000.</p>
+  </div>
+  <div class="rules-section">
+    <h3>Daily vs Freeplay</h3>
+    <p><b>Daily</b> — same five words for everyone, fresh at midnight. Builds your streak and stats.</p>
+    <p><b>Freeplay</b> — random words, unlimited replays. Doesn't affect your stats.</p>
+  </div>
+`;
 
 const ROUND_LENGTHS = [3, 4, 5, 6, 7];
 
@@ -975,13 +1041,18 @@ function submitGuess(word){
 // Old saved games may still have a 'timeout' round status; we tolerate it
 // in showResults / share text but never produce new ones.
 
+// Remembered so showRoundComplete can be re-shown after exiting review mode
+let _lastRoundCompleteTimedOut = false;
 function showRoundComplete(timedOut){
+  _lastRoundCompleteTimedOut = !!timedOut;
   const r = state.rounds[state.round];
   const answer = state.words[state.round];
   const overlay = $('overlay');
   overlay.innerHTML = '';
   const card = document.createElement('div');
   card.className = 'card';
+  // Only show the "Review past rounds" button if there are completed rounds before this one
+  const hasPast = state.round > 0;
   card.innerHTML = `
     <h2>${timedOut ? "Time's up!" : 'Solved'}</h2>
     <div class="word">${answer}</div>
@@ -989,6 +1060,7 @@ function showRoundComplete(timedOut){
     <div class="stat"><span>Wrong guesses</span><b>${r.wrong}</b></div>
     <div class="stat"><span>Round score</span><b id="rscore">0</b></div>
     <button class="btn" id="nextbtn">${state.round < 4 ? 'Next round →' : 'See results →'}</button>
+    ${hasPast ? '<button class="btn secondary" id="reviewpastbtn">Review past rounds</button>' : ''}
   `;
   overlay.appendChild(card);
   overlay.classList.add('show');
@@ -1008,9 +1080,14 @@ function showRoundComplete(timedOut){
     }
   };
   $('nextbtn').addEventListener('click', advance);
-  setTimeout(() => {
-    if (overlay.classList.contains('show')) advance();
-  }, 4500);
+  if (hasPast){
+    // Open review at the most recent past round, bounded so prev/next can't reach
+    // the current (just-completed) round's "future" siblings.
+    $('reviewpastbtn').addEventListener('click', () => {
+      enterReviewMode(state.round - 1, { returnTo: 'complete', maxIdx: state.round });
+    });
+  }
+  // No auto-advance — the player must click Next round to continue.
 }
 
 function startRound(){
@@ -1023,7 +1100,60 @@ function startRound(){
   renderProgress();
   renderBoard();
   renderKeyboard();
-  startTimer();
+  // If this is a truly fresh game (round 0, no guesses, no time elapsed),
+  // gate the timer behind a Welcome/Begin screen so the timer doesn't start
+  // ticking before the player is ready.
+  if (isFreshGameStart()){
+    showWelcome();
+  } else {
+    startTimer();
+  }
+}
+
+function isFreshGameStart(){
+  if (!state || state.finished) return false;
+  if (state.round !== 0) return false;
+  const r = state.rounds[0];
+  return r.guesses.length === 0 && r.secs === 0;
+}
+
+// ---- Welcome / Begin gate (shown at fresh game start) ----
+function showWelcome(){
+  const overlay = $('overlay');
+  overlay.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  const isDaily = state.mode === 'daily';
+  card.innerHTML = `
+    <h2>How to play</h2>
+    ${RULES_HTML}
+    <button class="btn" id="welcome-begin">${isDaily ? "Start today's puzzle →" : "Start freeplay →"}</button>
+  `;
+  overlay.appendChild(card);
+  overlay.classList.add('show');
+  inputLocked = true;  // disable typing until they hit Begin
+  $('welcome-begin').addEventListener('click', () => {
+    overlay.classList.remove('show');
+    inputLocked = false;
+    // Reset the timer baseline so the elapsed counter starts fresh from this click
+    roundStartMs = 0;
+    state.rounds[state.round].secs = 0;
+    startTimer();
+  });
+}
+
+// ---- Rules side panel (always available via ? button) ----
+function showRules(){
+  const panel = $('stats-panel');
+  panel.innerHTML = `
+    <div class="side-panel-header">
+      <h2 id="stats-title">How to play</h2>
+      <button class="closebtn" id="closerules" aria-label="Close rules">×</button>
+    </div>
+    ${RULES_HTML}
+  `;
+  $('closerules').addEventListener('click', closeStatsPanel);
+  openStatsPanel();
 }
 
 function showResults(){
@@ -1058,6 +1188,7 @@ function showResults(){
     <button class="btn share" id="sharebtn">Share result</button>
     <button class="btn secondary" id="reviewbtn">Review rounds</button>
     ${isFreeplay ? '' : '<button class="btn secondary" id="viewstatsbtn">View stats</button>'}
+    ${isFreeplay ? '' : '<button class="btn secondary" id="tryfreeplaybtn">Play Freeplay →</button>'}
     ${footer}
   `;
   overlay.appendChild(card);
@@ -1074,6 +1205,10 @@ function showResults(){
   });
   if (!isFreeplay){
     $('viewstatsbtn').addEventListener('click', showStats);
+    $('tryfreeplaybtn').addEventListener('click', () => {
+      localStorage.setItem(STORAGE_MODE, 'freeplay');
+      startNewFreeplay();
+    });
     startCountdown();
   } else {
     $('newgamebtn').addEventListener('click', startNewFreeplay);
@@ -1172,11 +1307,19 @@ function switchMode(targetMode){
   startRound();
 }
 
-// ---- review mode (browse past rounds after game complete) ----
+// ---- review mode (browse rounds — usable after game complete OR mid-game from round-complete card) ----
 let reviewIndex = 0;
-function enterReviewMode(idx){
-  if (!state || !state.finished) return;
-  reviewIndex = Math.max(0, Math.min(4, idx | 0));
+let reviewMaxIdx = 4;          // upper bound for prev/next arrows (inclusive)
+let reviewReturnTo = 'results'; // 'results' | 'complete'
+function enterReviewMode(idx, opts){
+  // Allow review either when the game is finished (full review) OR when called
+  // from the round-complete card mid-game (must pass returnTo:'complete').
+  if (!state) return;
+  const returnTo = (opts && opts.returnTo) || 'results';
+  if (returnTo === 'results' && !state.finished) return;
+  reviewReturnTo = returnTo;
+  reviewMaxIdx = (opts && typeof opts.maxIdx === 'number') ? opts.maxIdx : 4;
+  reviewIndex = Math.max(0, Math.min(reviewMaxIdx, idx | 0));
   $('overlay').classList.remove('show');
   renderReview();
 }
@@ -1192,12 +1335,12 @@ function renderReview(){
       <div class="review-info">${lenLabel} — ${r.length} letters<b>${ans}</b></div>
       <button class="review-arrow" id="rv-next" aria-label="Next round">›</button>
     </div>
-    <button class="review-back" id="rv-back">← Back to results</button>
+    <button class="review-back" id="rv-back">${reviewReturnTo === 'complete' ? '← Back to round result' : '← Back to results'}</button>
   `;
   $('rv-prev').disabled = (reviewIndex === 0);
-  $('rv-next').disabled = (reviewIndex === 4);
+  $('rv-next').disabled = (reviewIndex >= reviewMaxIdx);
   $('rv-prev').addEventListener('click', () => { if (reviewIndex>0){ reviewIndex--; renderReview(); }});
-  $('rv-next').addEventListener('click', () => { if (reviewIndex<4){ reviewIndex++; renderReview(); }});
+  $('rv-next').addEventListener('click', () => { if (reviewIndex<reviewMaxIdx){ reviewIndex++; renderReview(); }});
   $('rv-back').addEventListener('click', exitReviewMode);
   // Render the board for that round
   const board = $('board');
@@ -1229,10 +1372,14 @@ function renderReview(){
   });
 }
 function exitReviewMode(){
-  // Restore the keyboard, clear the review bar, and re-show the results overlay
+  // Restore the keyboard, clear the review bar, and re-show the appropriate screen
   $('message').innerHTML = '';
   $('keyboard').style.display = '';
-  showResults();
+  if (reviewReturnTo === 'complete'){
+    showRoundComplete(_lastRoundCompleteTimedOut);
+  } else {
+    showResults();
+  }
 }
 
 function startNewFreeplay(){
@@ -1395,6 +1542,8 @@ function init(){
   bindVisibilityHandlers();
   const sb = $('statsbtn');
   if (sb) sb.addEventListener('click', showStats);
+  const rb = $('rulesbtn');
+  if (rb) rb.addEventListener('click', showRules);
   $('mode-daily').addEventListener('click', () => switchMode('daily'));
   $('mode-freeplay').addEventListener('click', () => switchMode('freeplay'));
   const bd = $('panel-backdrop');
@@ -1406,8 +1555,6 @@ function init(){
   });
   renderModeToggle();
   if (state.finished){
-    // Game already complete — clamp round to a valid index, skip board/keyboard
-    // (the overlay covers them), and show the results card immediately.
     if (state.round >= state.rounds.length) state.round = state.rounds.length - 1;
     renderProgress();
     showResults();
