@@ -465,7 +465,7 @@
     <button id="rulesbtn" aria-label="How to play" title="How to play">?</button>
     <button id="statsbtn" aria-label="View stats" title="Stats">📊</button>
     <h1 class="logo">Worgent</h1>
-    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.20</span></p>
+    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.23</span></p>
     <div class="mode-toggle" role="tablist" aria-label="Game mode">
       <button class="mode-pill active" id="mode-daily" role="tab" aria-selected="true">Daily</button>
       <button class="mode-pill" id="mode-freeplay" role="tab" aria-selected="false">Freeplay</button>
@@ -635,6 +635,13 @@ function holidayWord(length, dayIdx){
   // Only honor the override if it's a real word the player can guess
   if (VALID[length] && VALID[length].has(lower)) return w.toUpperCase();
   return null;
+}
+
+// Format the puzzle's date as "May 3, 2026" — used in result heading & share text
+function formatPuzzleDate(dayIdx){
+  const d = new Date(EPOCH.getTime() + dayIdx * 86400000);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
 function dailyAnswer(length, dayIdx){
@@ -1180,7 +1187,7 @@ function showResults(){
     const sCell = r.status === 'timeout' ? '0' : r.score;
     rowsHtml += `<tr class="clickable" data-round="${i}"><td>${lenEmoji}</td><td>${tCell}</td><td>${r.guesses.length}</td><td class="score">${sCell}</td></tr>`;
   });
-  const heading = isFreeplay ? 'Worgent Freeplay' : `Worgent #${state.dayIdx}`;
+  const heading = isFreeplay ? 'Worgent Freeplay' : `Worgent · ${formatPuzzleDate(state.dayIdx)}`;
   const footer = isFreeplay
     ? '<button class="btn" id="newgamebtn">New game →</button>'
     : '<div class="countdown" id="cd"></div>';
@@ -1236,22 +1243,26 @@ function ratingFor(total){
 }
 
 function buildShareText(total){
+  // Use middle-dot · instead of | as a separator. Pipes are commonly used in
+  // phone/vCard formats, and Facebook Messenger's contact-detection has been
+  // observed to misread our score lines as phone numbers and attach unrelated
+  // WhatsApp contact suggestions. The middle dot avoids that.
   const isFreeplay = state.mode === 'freeplay';
   const heading = isFreeplay
-    ? `Worgent Freeplay — ${total}/5000`
-    : `Worgent #${state.dayIdx} — ${total}/5000`;
+    ? `Worgent Freeplay — ${total} of 5000`
+    : `Worgent · ${formatPuzzleDate(state.dayIdx)} — ${total} of 5000`;
   const lines = [heading, ''];
   const lenEmoji = ['3️⃣','4️⃣','5️⃣','6️⃣','7️⃣'];
   state.rounds.forEach((r, i) => {
     if (r.status === 'timeout'){
-      lines.push(`${lenEmoji[i]} ❌ | ${r.guesses.length} guess(es)`);
+      lines.push(`${lenEmoji[i]} ❌ · ${r.guesses.length} guess(es)`);
     } else {
       const g = r.guesses.length;
-      lines.push(`${lenEmoji[i]} ${r.score} | ⏱${formatTime(r.secs)} | ${g} guess${g===1?'':'(es)'}`);
+      lines.push(`${lenEmoji[i]} ${r.score} pts · ⏱${formatTime(r.secs)} · ${g} guess${g===1?'':'(es)'}`);
     }
   });
   lines.push('');
-  lines.push('worgent.com');
+  lines.push('https://worgent.com');
   return lines.join('\n');
 }
 
@@ -1259,7 +1270,8 @@ async function doShare(total){
   const text = buildShareText(total);
   try {
     if (navigator.share){
-      await navigator.share({ text, title: 'Worgent' });
+      // Pass `url` separately so platforms generate a rich preview / clickable link
+      await navigator.share({ text, url: 'https://worgent.com', title: 'Worgent' });
       return;
     }
   } catch(e){}
