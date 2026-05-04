@@ -1307,8 +1307,9 @@ async function doShare(total){
   const text = buildShareText(total);
   try {
     if (navigator.share){
-      // Pass `url` separately so platforms generate a rich preview / clickable link
-      await navigator.share({ text, url: 'https://worgent.com', title: 'Worgent' });
+      // The URL is already included in `text`; passing it separately caused
+      // it to appear twice on platforms that render both fields.
+      await navigator.share({ text, title: 'Worgent' });
       return;
     }
   } catch(e){}
