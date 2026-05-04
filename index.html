@@ -66,6 +66,14 @@
   #rulesbtn{right:46px}
   #statsbtn:hover, #rulesbtn:hover{background:var(--cream);border-color:var(--brown)}
   #statsbtn:active, #rulesbtn:active{transform:scale(.92)}
+  /* Hide the ? and stats buttons whenever a modal/panel is open so they don't
+     overlap modals (mobile especially) and can't be tapped through. */
+  body:has(#overlay.show) #statsbtn,
+  body:has(#overlay.show) #rulesbtn,
+  body:has(#stats-panel.show) #statsbtn,
+  body:has(#stats-panel.show) #rulesbtn{
+    opacity:0;visibility:hidden;pointer-events:none;
+  }
   h1.logo{
     margin:18px 0 4px;font-size:36px;font-weight:900;
     letter-spacing:.14em;color:var(--charcoal);text-transform:uppercase;
@@ -457,7 +465,7 @@
     <button id="rulesbtn" aria-label="How to play" title="How to play">?</button>
     <button id="statsbtn" aria-label="View stats" title="Stats">📊</button>
     <h1 class="logo">Worgent</h1>
-    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.17</span></p>
+    <p class="tagline">five words · one day · one shot <span style="opacity:.4;font-size:9px">v1.20</span></p>
     <div class="mode-toggle" role="tablist" aria-label="Game mode">
       <button class="mode-pill active" id="mode-daily" role="tab" aria-selected="true">Daily</button>
       <button class="mode-pill" id="mode-freeplay" role="tab" aria-selected="false">Freeplay</button>
@@ -519,7 +527,6 @@ const RULES_HTML = `
   </div>
   <div class="rules-section">
     <h3>Scoring</h3>
-    <div class="rules-formula">round score = max(0,&nbsp; 1000 − seconds × 1.2 − wrong × 30)</div>
     <p>Faster + fewer wrong guesses = higher score. Each round caps at 1000, total caps at 5000.</p>
   </div>
   <div class="rules-section">
