@@ -23,7 +23,8 @@
   // lists). If we pointed assets.directory at the repo root, those files
   // would be uploaded as static assets and reachable at
   // worgent.com/worker/words.js — which would defeat the entire point
-  // of moving the answers server-side.
+  // of moving the answers server-side.  
+  // test
   "name": "worgent",
   "main": "worker/index.js",
   "compatibility_date": "2026-05-05",
