@@ -1,14 +1,35 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  // Cloudflare Workers + Static Assets config for the Worgent site.
+  //
+  // This file tells `wrangler deploy` (run by Cloudflare's Workers Builds
+  // pipeline) how to upload the static site. There is no Worker script —
+  // only the static `assets` block — so requests are served directly from
+  // the files in the repo root without any server-side code.
+  //
+  // Production: `wrangler deploy` deploys the top-level config to the
+  // "worgent" Worker, served at worgent.com.
+  // Staging:    `wrangler deploy --env staging` deploys the env.staging
+  // config to a separate "worgent-staging" Worker, served at
+  // staging.worgent.com.
+  //
+  // The two Workers are completely independent — separate code, separate
+  // URLs, separate (eventually) bindings/databases — so you can ship
+  // breaking changes to staging without affecting production.
   "name": "worgent",
   "compatibility_date": "2026-05-05",
-  "observability": {
-    "enabled": true
-  },
   "assets": {
+    // "." means "serve the entire repo root as static files."
+    // index.html, CNAME, .nojekyll, etc. all live at the root of this repo.
     "directory": "."
   },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+
+  "env": {
+    "staging": {
+      // Different Worker name -> separate deployment from production.
+      "name": "worgent-staging",
+      "assets": {
+        "directory": "."
+      }
+    }
+  }
 }

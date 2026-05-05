@@ -1020,13 +1020,13 @@ function onEnter(){
   }
   const lower = currentGuess.toLowerCase();
   if (!VALID[r.length].has(lower) && !ANSWERS[r.length].includes(lower)){
-    shakeCurrent('Not a word');
+    shakeCurrent('Not a word', true);
     return;
   }
   submitGuess(currentGuess);
 }
 
-function shakeCurrent(msg){
+function shakeCurrent(msg, clearAfter){
   const board = $('board');
   const rows = board.querySelectorAll('.row.current');
   if (rows.length){
@@ -1037,6 +1037,16 @@ function shakeCurrent(msg){
   }
   setMessage(msg);
   setTimeout(()=>setMessage(''), 1400);
+  // For invalid-word rejections, wipe the row after the shake finishes so
+  // the player can immediately type a new guess without backspacing.
+  if (clearAfter){
+    inputLocked = true;
+    setTimeout(() => {
+      currentGuess = '';
+      inputLocked = false;
+      renderBoard();
+    }, 420);
+  }
 }
 
 function submitGuess(word){
