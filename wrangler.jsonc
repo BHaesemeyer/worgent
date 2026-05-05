@@ -1,0 +1,20 @@
+{
+  // Cloudflare Workers + Static Assets config for the Worgent site.
+  //
+  // This file tells `wrangler deploy` (run by Cloudflare's Workers Builds
+  // pipeline) how to upload the static site. There is no Worker script —
+  // only the static `assets` block — so requests are served directly from
+  // the files in the repo root without any server-side code.
+  //
+  // If your Cloudflare Worker is named something other than "worgent",
+  // change the `name` field below to match the project name shown in
+  // your Cloudflare dashboard. The names must match for `wrangler deploy`
+  // to target the correct Worker.
+  "name": "worgent",
+  "compatibility_date": "2026-05-05",
+  "assets": {
+    // "." means "serve the entire repo root as static files."
+    // index.html, CNAME, .nojekyll, etc. all live at the root of this repo.
+    "directory": "."
+  }
+}
