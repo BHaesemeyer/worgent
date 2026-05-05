@@ -580,18 +580,24 @@ const STORAGE_KEY_FREEPLAY = 'worgent_freeplay_state_v1';
 const STORAGE_DATE = 'worgent_date_v1';
 const STORAGE_HISTORY = 'worgent_history_v1';
 const STORAGE_MODE = 'worgent_mode_v1';
-const EPOCH = new Date(2025, 0, 1);
+// EPOCH and todayDayIndex use UTC midnights so the dayIdx math is
+// timezone- and DST-independent. The server (worker/puzzle.js) maps
+// dayIdx -> 'MM-DD' via Date.UTC(2025,0,1) + dayIdx*86400000, so the
+// client must use the same UTC anchor or the two will disagree across
+// DST boundaries (e.g. local-time subtraction silently drops a day in
+// spring/summer because of the spring-forward hour).
+const EPOCH_UTC = Date.UTC(2025, 0, 1);
 
 function todayDayIndex(){
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.floor((today - EPOCH) / 86400000);
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((todayUTC - EPOCH_UTC) / 86400000);
 }
 // Format the puzzle's date as "May 3, 2026" — used in result heading & share text
 function formatPuzzleDate(dayIdx){
-  const d = new Date(EPOCH.getTime() + dayIdx * 86400000);
+  const d = new Date(EPOCH_UTC + dayIdx * 86400000);
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
 // --- Server API client -------------------------------------------------
@@ -684,15 +690,20 @@ async function loadState(mode){
       const raw = localStorage.getItem(STORAGE_KEY_DAILY);
       if (!raw) return freshState('daily');
       const parsed = JSON.parse(raw);
-      // Legacy state (pre-server) had answers in parsed.words. We can't
-      // re-validate them against the (now-server-side) puzzle, but it's
-      // still the same puzzle for this dayIdx, so trust the saved state
-      // and let the server be the source of truth on new guesses.
-      // For new daily games, parsed.words will be nulls; for legacy
-      // saves, it'll have answers — both are fine.
-      if (!Array.isArray(parsed.words) || parsed.words.length !== ROUND_LENGTHS.length){
-        parsed.words = ROUND_LENGTHS.map(() => null);
-      }
+      // The server is the only place that knows the answer for an
+      // unsolved round. Wipe parsed.words[i] unless that round is
+      // already finished — kept ones are needed by the round-complete
+      // overlay and the final results card. This matters for two cases:
+      //   1. Legacy saves from pre-server-validation builds, which had
+      //      every answer baked into parsed.words.
+      //   2. Defensive: any future code path that accidentally writes
+      //      an answer into state.words for a pending round.
+      const legacyWords = Array.isArray(parsed.words) ? parsed.words : [];
+      parsed.words = ROUND_LENGTHS.map((_, i) => {
+        const r = parsed.rounds && parsed.rounds[i];
+        const finished = r && (r.status === 'won' || r.status === 'timeout');
+        return finished ? (legacyWords[i] || null) : null;
+      });
       parsed.mode = 'daily';
       if (typeof parsed.currentGuess !== 'string') parsed.currentGuess = '';
       return parsed;

@@ -5,40 +5,39 @@
   // daily-puzzle guesses server-side, and falls through to the static
   // assets in ./public for everything else (index.html, fonts, etc.).
   //
-  // Production: `wrangler deploy` deploys the top-level config to the
-  //   "worgent" Worker, served at worgent.com.
-  // Staging:    `wrangler deploy --env staging` deploys the env.staging
-  //   config to a separate "worgent-staging" Worker, served at
-  //   staging.worgent.com.
+  // Deployment model: ONE Worker, named "worgent".
+  //   - Production:  the `main` (or `production_branch`) build deploys
+  //     to the live worgent Worker, served at worgent.com.
+  //   - Non-prod branches: Cloudflare Workers Builds creates a *preview*
+  //     deployment for each push and exposes it at a per-version URL
+  //     (e.g. <version>-worgent.<account>.workers.dev). Those previews
+  //     share this same wrangler config — no separate `env.*` block is
+  //     needed and there is no separate Worker to manage.
   //
-  // The two Workers are completely independent — separate code paths,
-  // separate URLs, separate (eventually) bindings/databases — so you can
-  // ship breaking changes to staging without affecting production.
+  // We previously ran a second Worker called "worgent-staging" via an
+  // `env.staging` section. That's gone now: preview URLs cover the same
+  // need without doubling the deploy surface.
   //
   // Why ./public and not ./? Because the worker/ directory contains
   // server-only source files (notably worker/words.js with the answer
   // lists). If we pointed assets.directory at the repo root, those files
   // would be uploaded as static assets and reachable at
   // worgent.com/worker/words.js — which would defeat the entire point
-  // of moving the answers server-side.
+  // of moving the answers server-side.  
+  // test
   "name": "worgent",
   "main": "worker/index.js",
   "compatibility_date": "2026-05-05",
+
+  // Enable Cloudflare's built-in preview URLs for non-production
+  // versions. This is the default for new Workers, but we set it
+  // explicitly so the intent is obvious in source.
+  "preview_urls": true,
+
   "assets": {
     "directory": "./public",
     // Bind the static assets to env.ASSETS so the Worker can fall
     // through to them with `env.ASSETS.fetch(request)`.
     "binding": "ASSETS"
-  },
-
-  "env": {
-    "staging": {
-      "name": "worgent-staging",
-      "main": "worker/index.js",
-      "assets": {
-        "directory": "./public",
-        "binding": "ASSETS"
-      }
-    }
   }
 }
