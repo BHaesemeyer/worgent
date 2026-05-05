@@ -21,7 +21,7 @@
   // would be uploaded as static assets and reachable at
   // worgent.com/worker/words.js — which would defeat the entire point
   // of moving the answers server-side.
-  "name": "worgent",
+  "name": "worgent-staging",
   "main": "worker/index.js",
   "compatibility_date": "2026-05-05",
   "assets": {
