@@ -21,22 +21,31 @@ import { ANSWERS } from "./words.js";
 // client's VALID set) so players can still type them as guesses — the
 // game only refuses to *choose* them as the puzzle to solve.
 //
-// Criterion: "would this be jarring to land on as the word of the day?"
-// — vulgar slang and anatomical/sexual terms. Slurs and clearly
-// offensive labels for people are NOT in this set; those are deleted
-// entirely from ANSWERS and VALID rather than left typeable, so they
-// don't appear here. Adjust this list when policy on vulgar-but-not-
-// slur words changes; for slurs, edit the wordlists directly.
+// Criterion: "would this be jarring or insensitive to land on as the
+// word of the day?" — covers vulgar slang, anatomical/sexual terms,
+// graphic violence, sensitive medical/disease terms, drug names, and
+// weapons heavy enough to feel out of place as a daily puzzle. The
+// words are still real English so we keep them typeable; we just don't
+// inflict them on players as the answer.
+//
+// Out of scope for this list: slurs and clearly offensive labels for
+// people. Those are deleted entirely from ANSWERS and VALID instead of
+// left typeable, so they shouldn't appear here. If a slur shows up,
+// remove it from the wordlists rather than adding it to this set.
 const BLOCKED_ANSWERS = new Set([
   // 4-letter
-  "cock", "crap", "fart", "hump", "jerk",
-  "lust", "pimp", "porn", "puke", "shag", "snog", "snot",
+  "aids", "bomb", "cock", "crap", "fart", "hump", "jerk",
+  "lust", "pimp", "porn", "puke", "shag", "slay", "snog",
+  "snot", "stab",
   // 5-letter
-  "butch", "horny", "pubic", "screw", "spunk",
+  "butch", "drunk", "horny", "pubic", "screw", "slain", "sperm",
+  "spunk", "thong", "tumor",
   // 6-letter
-  "crotch", "diddle", "douche", "nipple", "nudism", "nudist", "nudity", "orgasm",
+  "addict", "behead", "bomber", "breast", "cancer", "corpse", "crotch",
+  "diddle", "douche", "heroin", "killer", "mugged", "mugger", "murder",
+  "nipple", "nudism", "nudist", "nudity", "opiate", "orgasm",
   // 7-letter
-  "asshole", "dildoes", "scrotal", "topless",
+  "asshole", "cholera", "cocaine", "dildoes", "scrotal", "topless",
 ]);
 
 // Themed-day overrides: each entry is 'MM-DD' -> [3, 4, 5, 6, 7] letter words.
