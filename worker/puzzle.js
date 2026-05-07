@@ -38,7 +38,7 @@ const BLOCKED_ANSWERS = new Set([
   "crotch", "damned", "diddle", "douche", "hooker", "junkie", "lecher",
   "nipple", "nudism", "nudist", "nudity", "orgasm",
   // 7-letter
-  "asshole", "dildoes", "negroid", "scrotal", "topless", "whorish",
+  "asshole", "dildoes", "scrotal", "topless", "whorish",
 ]);
 
 // Themed-day overrides: each entry is 'MM-DD' -> [3, 4, 5, 6, 7] letter words.
