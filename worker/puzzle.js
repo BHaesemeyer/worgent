@@ -21,24 +21,22 @@ import { ANSWERS } from "./words.js";
 // client's VALID set) so players can still type them as guesses — the
 // game only refuses to *choose* them as the puzzle to solve.
 //
-// Criterion: "would this be jarring or offensive to land on as the word
-// of the day?" — vulgar slang, anatomical/sexual terms, slurs, and common
-// profanity. Mild expletives ("damn", "hell") are included since they
-// read as profanity to some audiences. Adjust here rather than editing
-// ANSWERS so guess-validation parity with the client's VALID list stays
-// intact.
+// Criterion: "would this be jarring to land on as the word of the day?"
+// — vulgar slang and anatomical/sexual terms. Slurs and clearly
+// offensive labels for people are NOT in this set; those are deleted
+// entirely from ANSWERS and VALID rather than left typeable, so they
+// don't appear here. Adjust this list when policy on vulgar-but-not-
+// slur words changes; for slurs, edit the wordlists directly.
 const BLOCKED_ANSWERS = new Set([
   // 4-letter
-  "cock", "crap", "damn", "dyke", "fart", "hell", "hump", "jerk",
+  "cock", "crap", "fart", "hump", "jerk",
   "lust", "pimp", "porn", "puke", "shag", "snog", "snot",
   // 5-letter
-  "butch", "horny", "hussy", "moron", "pubic", "queer", "screw",
-  "spunk", "tramp",
+  "butch", "horny", "pubic", "screw", "spunk",
   // 6-letter
-  "crotch", "damned", "diddle", "douche", "hooker", "junkie", "lecher",
-  "nipple", "nudism", "nudist", "nudity", "orgasm",
+  "crotch", "diddle", "douche", "nipple", "nudism", "nudist", "nudity", "orgasm",
   // 7-letter
-  "asshole", "dildoes", "scrotal", "topless", "whorish",
+  "asshole", "dildoes", "scrotal", "topless",
 ]);
 
 // Themed-day overrides: each entry is 'MM-DD' -> [3, 4, 5, 6, 7] letter words.
