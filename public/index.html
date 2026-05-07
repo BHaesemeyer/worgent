@@ -138,6 +138,49 @@
     0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(196,67,58,0)}
     50%{transform:scale(1.04);box-shadow:0 0 0 6px rgba(196,67,58,.15)}
   }
+  /* Timer + flag-button stack. The wrap is `position: relative` so the
+     flag can be placed `position: absolute` above the timer without
+     taking any layout space — its appearance/disappearance never
+     reflows the page. */
+  .timer-wrap{position:relative;flex-shrink:0;display:inline-flex;align-items:center}
+  .flag-btn{
+    position:absolute;bottom:100%;right:0;margin-bottom:2px;
+    background:transparent;border:none;padding:0 4px;
+    font-size:18px;line-height:1;cursor:pointer;font-family:inherit;
+    opacity:0;pointer-events:none;transform-origin:bottom left;
+    transition:opacity .25s;
+  }
+  .flag-btn[hidden]{display:none}
+  .flag-btn.visible{
+    opacity:1;pointer-events:auto;
+    /* One-shot wave-in animation when the button first appears. */
+    animation:flag-appear 1.2s ease-out;
+  }
+  @keyframes flag-appear{
+    0%  {opacity:0;transform:rotate(-30deg) translateY(8px)}
+    25% {opacity:1;transform:rotate(15deg) translateY(0)}
+    45% {transform:rotate(-12deg)}
+    65% {transform:rotate(8deg)}
+    85% {transform:rotate(-4deg)}
+    100%{transform:rotate(0)}
+  }
+  /* Played when the player confirms the forfeit. Bigger swings than the
+     appearance animation; ends back at rest so it stays visible during
+     the brief pause before the round-complete card appears. */
+  .flag-btn.surrender{animation:flag-surrender 1s ease-in-out forwards}
+  @keyframes flag-surrender{
+    0%  {transform:rotate(0)}
+    15% {transform:rotate(-25deg)}
+    30% {transform:rotate(20deg)}
+    45% {transform:rotate(-18deg)}
+    60% {transform:rotate(15deg)}
+    75% {transform:rotate(-10deg)}
+    100%{transform:rotate(0)}
+  }
+  /* Tile variant used for the "I gave up" row of flags shown on the
+     board for forfeited rounds. */
+  .tile.flag{background:var(--cream);border-color:var(--brown);
+    color:var(--brown);font-size:22px;letter-spacing:0}
   #board-wrap{
     flex:1;display:flex;flex-direction:column;align-items:center;
     justify-content:flex-start;
@@ -474,7 +517,11 @@
     <div class="progress" id="progress" aria-label="Round progress"></div>
     <div class="meta">
       <span class="roundlbl" id="roundlbl">Round 1 — 3 letters</span>
-      <span class="timer" id="timer" aria-live="off">0:00</span>
+      <span class="timer-wrap">
+        <button type="button" class="flag-btn" id="flagbtn"
+          aria-label="Wave the white flag (forfeit this round)" hidden>🏳️</button>
+        <span class="timer" id="timer" aria-live="off">0:00</span>
+      </span>
     </div>
   </header>
   <div id="board-wrap">
@@ -701,7 +748,7 @@ async function loadState(mode){
       const legacyWords = Array.isArray(parsed.words) ? parsed.words : [];
       parsed.words = ROUND_LENGTHS.map((_, i) => {
         const r = parsed.rounds && parsed.rounds[i];
-        const finished = r && (r.status === 'won' || r.status === 'timeout');
+        const finished = r && (r.status === 'won' || r.status === 'timeout' || r.status === 'forfeited');
         return finished ? (legacyWords[i] || null) : null;
       });
       parsed.mode = 'daily';
@@ -840,7 +887,7 @@ function calcGuessScore(guesses){
   return Math.max(SCORE_FLOOR, Math.round(v));
 }
 function calcScore(secs, guesses, status){
-  if (status === 'timeout') return 0;
+  if (status === 'timeout' || status === 'forfeited') return 0;
   return calcTimeScore(secs) + calcGuessScore(guesses);
 }
 
@@ -897,7 +944,14 @@ function renderBoard(){
   for (const g of r.guesses){
     board.appendChild(buildRow(len, g.word.split(''), g.marks, false));
   }
-  if (r.status === 'pending' && !state.finished){
+  if (r.status === 'forfeited'){
+    // Show a row of white flags as the "final guess" for forfeited
+    // rounds, so the board has a clear visual marker that the player
+    // gave up rather than just an empty trailing space.
+    const flagLetters = new Array(len).fill('🏳️');
+    const flagMarks = new Array(len).fill('flag');
+    board.appendChild(buildRow(len, flagLetters, flagMarks, false));
+  } else if (r.status === 'pending' && !state.finished){
     board.appendChild(buildRow(len, currentGuess.padEnd(len,' ').split('').map(c=>c===' '?'':c), null, true));
   }
   board.scrollTop = board.scrollHeight;
@@ -973,6 +1027,13 @@ function startTimer(){
   // Force the display to update immediately so the user sees the reset.
   const tEl = $('timer');
   if (tEl) tEl.textContent = formatTime(r.secs);
+  // Reset the flag-button at the start of every round so the wave-in
+  // animation will replay if/when the player crosses 60s in this round.
+  const flag = $('flagbtn');
+  if (flag){
+    flag.classList.remove('visible','surrender');
+    flag.hidden = true;
+  }
   updateTimer();
   timerInterval = setInterval(updateTimer, 250);
 }
@@ -986,8 +1047,134 @@ function updateTimer(){
   const mm = Math.floor(elapsed / 60), ss = elapsed % 60;
   const tEl = $('timer');
   tEl.textContent = mm + ':' + (ss<10?'0':'') + ss;
+  // White-flag (forfeit) button appears once 60s have elapsed in the
+  // current round. It's absolutely positioned, so toggling visibility
+  // doesn't shift any other element on the page.
+  updateFlagVisibility(elapsed);
   // No time limit — pure stopwatch. Round only ends on correct guess.
   if (elapsed % 5 === 0) saveState();
+}
+
+// Show/hide the flag forfeit button based on elapsed time in the
+// current round. Idempotent — safe to call every timer tick.
+const FLAG_THRESHOLD_SECS = 60;
+function updateFlagVisibility(elapsed){
+  const flag = $('flagbtn');
+  if (!flag || !state || state.round >= state.rounds.length) return;
+  const r = state.rounds[state.round];
+  const shouldShow =
+    !state.finished && r && r.status === 'pending' && elapsed >= FLAG_THRESHOLD_SECS;
+  const isVisible = flag.classList.contains('visible');
+  if (shouldShow && !isVisible){
+    flag.hidden = false;
+    flag.classList.remove('surrender');
+    // Force a reflow so the appearance animation re-triggers cleanly.
+    void flag.offsetWidth;
+    flag.classList.add('visible');
+  } else if (!shouldShow && isVisible){
+    flag.classList.remove('visible','surrender');
+    flag.hidden = true;
+  }
+}
+
+// Confirmation dialog before actually forfeiting. The player can back
+// out via "Keep playing" — protects against an accidental tap.
+function confirmForfeit(){
+  if (!state || state.finished) return;
+  const r = state.rounds[state.round];
+  if (!r || r.status !== 'pending') return;
+  const overlay = $('overlay');
+  if (overlay.classList.contains('show')) return;  // another modal already open
+  overlay.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <h2>Wave the white flag?</h2>
+    <div style="margin:8px 0 14px;font-size:14px;line-height:1.4;color:var(--charcoal)">
+      You'll see the answer for this round and score <b>0</b> points.
+      You can still play the remaining rounds.
+    </div>
+    <button class="btn" id="forfeit-yes">Yes, forfeit</button>
+    <button class="btn secondary" id="forfeit-no">Keep playing</button>
+  `;
+  overlay.appendChild(card);
+  overlay.classList.add('show');
+  inputLocked = true;
+  $('forfeit-yes').addEventListener('click', () => {
+    overlay.classList.remove('show');
+    overlay.innerHTML = '';
+    inputLocked = false;
+    doForfeit();
+  });
+  $('forfeit-no').addEventListener('click', () => {
+    overlay.classList.remove('show');
+    overlay.innerHTML = '';
+    inputLocked = false;
+  });
+}
+
+// Carry out the forfeit: stop the timer, reveal the answer, mark the
+// round as forfeited with 0 score, animate the flag waving, and then
+// open the round-complete card.
+async function doForfeit(){
+  if (!state || state.finished) return;
+  const r = state.rounds[state.round];
+  if (!r || r.status !== 'pending') return;
+
+  // Trigger the surrender wave animation on the flag button.
+  const flag = $('flagbtn');
+  if (flag){
+    flag.classList.remove('surrender');
+    void flag.offsetWidth;
+    flag.classList.add('visible','surrender');
+  }
+
+  stopTimer();
+  inputLocked = true;
+
+  // Resolve the answer. Daily mode hits the server; freeplay already
+  // has it client-side from the freeplay/words call at game start.
+  let answer;
+  try {
+    if (state.mode === 'daily'){
+      answer = await fetchReveal(state.dayIdx, state.round);
+    } else {
+      answer = state.words[state.round];
+    }
+  } catch (e){
+    // If the reveal fails, restore the round to pending so the player
+    // can keep going. Cancel the surrender animation.
+    if (flag) flag.classList.remove('surrender');
+    inputLocked = false;
+    setMessage('Could not fetch the answer. Try again.');
+    setTimeout(() => setMessage(''), 1800);
+    startTimer();
+    return;
+  }
+  state.words[state.round] = answer;
+
+  // Lock in the round's final stats. Score is 0 across the board so
+  // forfeit ≠ playing well. We freeze r.secs at the current elapsed.
+  r.status = 'forfeited';
+  r.secs = Math.floor((Date.now() - roundStartMs) / 1000);
+  r.timeScore = 0;
+  r.guessScore = 0;
+  r.score = 0;
+  saveState();
+
+  // Show the flag row on the board so the brief pause before the
+  // round-complete card looks intentional rather than blank.
+  renderBoard();
+  announce('Forfeited. The answer was ' + answer);
+
+  // Wait for the surrender animation to finish, then advance the UI.
+  setTimeout(() => {
+    if (flag){
+      flag.classList.remove('visible','surrender');
+      flag.hidden = true;
+    }
+    showRoundComplete();
+  }, 1050);
 }
 
 function onLetter(ch){
@@ -1143,8 +1330,12 @@ function showRoundComplete(timedOut){
   const hasPast = state.round > 0;
   const tScore = r.timeScore || 0;
   const gScore = r.guessScore || 0;
+  // Heading reflects how the round ended: solved on a correct guess,
+  // timed out from the (now removed) clock, or forfeited via the flag.
+  const isForfeit = r.status === 'forfeited';
+  const heading = isForfeit ? 'White flag waved 🏳️' : timedOut ? "Time's up!" : 'Solved';
   card.innerHTML = `
-    <h2>${timedOut ? "Time's up!" : 'Solved'}</h2>
+    <h2>${heading}</h2>
     <div class="word">${answer}</div>
     <div class="stat"><span>Time</span><b>${formatTime(r.secs)} <span style="opacity:.55;font-size:13px">(+${tScore})</span></b></div>
     <div class="stat"><span>Guesses</span><b>${r.guesses.length} <span style="opacity:.55;font-size:13px">(+${gScore})</span></b></div>
@@ -1259,8 +1450,10 @@ function showResults(){
   let rowsHtml = '';
   state.rounds.forEach((r, i) => {
     const lenEmoji = ['3️⃣','4️⃣','5️⃣','6️⃣','7️⃣'][i];
-    const tCell = r.status === 'timeout' ? '❌' : formatTime(r.secs);
-    const sCell = r.status === 'timeout' ? '0' : r.score;
+    let tCell, sCell;
+    if (r.status === 'timeout'){ tCell = '❌'; sCell = '0'; }
+    else if (r.status === 'forfeited'){ tCell = '🏳️'; sCell = '0'; }
+    else { tCell = formatTime(r.secs); sCell = r.score; }
     rowsHtml += `<tr class="clickable" data-round="${i}"><td>${lenEmoji}</td><td>${tCell}</td><td>${r.guesses.length}</td><td class="score">${sCell}</td></tr>`;
   });
   const heading = isFreeplay ? 'Worgent Freeplay' : `Worgent · ${formatPuzzleDate(state.dayIdx)}`;
@@ -1333,6 +1526,8 @@ function buildShareText(total){
   state.rounds.forEach((r, i) => {
     if (r.status === 'timeout'){
       lines.push(`${lenEmoji[i]} ❌ · ${r.guesses.length} guess(es)`);
+    } else if (r.status === 'forfeited'){
+      lines.push(`${lenEmoji[i]} 🏳️ · ${r.guesses.length} guess(es)`);
     } else {
       const g = r.guesses.length;
       lines.push(`${lenEmoji[i]} ${r.score} pts · ⏱${formatTime(r.secs)} · ${g} guess${g===1?'':'(es)'}`);
@@ -1444,7 +1639,17 @@ function renderReview(){
   // Render the board for that round
   const board = $('board');
   board.innerHTML = '';
-  if (r.guesses.length === 0){
+  if (r.status === 'forfeited'){
+    // Replay the player's guesses, drop in the flag row that marks
+    // the surrender, and finish with the revealed answer in green.
+    for (const g of r.guesses){
+      board.appendChild(buildRow(r.length, g.word.split(''), g.marks, false));
+    }
+    const flagLetters = new Array(r.length).fill('🏳️');
+    const flagMarks = new Array(r.length).fill('flag');
+    board.appendChild(buildRow(r.length, flagLetters, flagMarks, false));
+    board.appendChild(buildRow(r.length, ans.split(''), new Array(r.length).fill('green'), false));
+  } else if (r.guesses.length === 0){
     // Round was a timeout with no guesses — show the answer only
     board.appendChild(buildRow(r.length, ans.split(''), new Array(r.length).fill('green'), false));
   } else {
@@ -1646,6 +1851,8 @@ async function init(){
   if (sb) sb.addEventListener('click', showStats);
   const rb = $('rulesbtn');
   if (rb) rb.addEventListener('click', showRules);
+  const fb = $('flagbtn');
+  if (fb) fb.addEventListener('click', confirmForfeit);
   $('mode-daily').addEventListener('click', () => switchMode('daily'));
   $('mode-freeplay').addEventListener('click', () => switchMode('freeplay'));
   const bd = $('panel-backdrop');
