@@ -16,6 +16,31 @@
 
 import { ANSWERS } from "./words.js";
 
+// Words that exist in ANSWERS but should never be selected as the daily
+// or freeplay answer. They remain in the ANSWERS dictionary (and in the
+// client's VALID set) so players can still type them as guesses — the
+// game only refuses to *choose* them as the puzzle to solve.
+//
+// Criterion: "would this be jarring or offensive to land on as the word
+// of the day?" — vulgar slang, anatomical/sexual terms, slurs, and common
+// profanity. Mild expletives ("damn", "hell") are included since they
+// read as profanity to some audiences. Adjust here rather than editing
+// ANSWERS so guess-validation parity with the client's VALID list stays
+// intact.
+const BLOCKED_ANSWERS = new Set([
+  // 4-letter
+  "cock", "crap", "damn", "dyke", "fart", "hell", "hump", "jerk",
+  "lust", "pimp", "porn", "puke", "shag", "snog", "snot",
+  // 5-letter
+  "butch", "horny", "hussy", "moron", "pubic", "queer", "screw",
+  "spunk", "tramp",
+  // 6-letter
+  "crotch", "damned", "diddle", "douche", "hooker", "junkie", "lecher",
+  "nipple", "nudism", "nudist", "nudity", "orgasm",
+  // 7-letter
+  "asshole", "dildoes", "scrotal", "topless", "whorish",
+]);
+
 // Themed-day overrides: each entry is 'MM-DD' -> [3, 4, 5, 6, 7] letter words.
 // Kept in sync with the original list previously embedded in index.html.
 const HOLIDAYS = {
@@ -55,10 +80,17 @@ function seedShuffle(arr, seed) {
 
 // Cache the shuffled permutation per length. Worker isolates may keep this
 // cache across requests, which is fine — the seed is fixed per length.
+//
+// We filter ANSWERS[length] through BLOCKED_ANSWERS before shuffling so
+// blocked words can never be picked as the daily or freeplay answer.
+// Note: this changes the permutation length and order vs. the unfiltered
+// pool, so removing/adding a blocked entry will shift which word lands
+// on which dayIdx. That's expected.
 const _permCache = {};
 function dailyPermutation(length) {
   if (!_permCache[length]) {
-    _permCache[length] = seedShuffle(ANSWERS[length], length * 7919 + 31);
+    const pool = ANSWERS[length].filter((w) => !BLOCKED_ANSWERS.has(w));
+    _permCache[length] = seedShuffle(pool, length * 7919 + 31);
   }
   return _permCache[length];
 }
@@ -89,9 +121,10 @@ export function dailyAnswer(length, dayIdx) {
   return p[idx].toUpperCase();
 }
 
-// Used when freeplay needs server-supplied random words later. Not wired
-// into any endpoint yet.
+// Used by the freeplay endpoint to pick random words. We reuse the
+// filtered/shuffled pool from dailyPermutation so freeplay also avoids
+// blocked words; selection within the pool is uniform random.
 export function randomAnswer(length) {
-  const list = ANSWERS[length];
-  return list[Math.floor(Math.random() * list.length)].toUpperCase();
+  const pool = dailyPermutation(length);
+  return pool[Math.floor(Math.random() * pool.length)].toUpperCase();
 }
